@@ -14,6 +14,29 @@ tags:
 A real-world pricing negotiation environment where an AI agent learns to negotiate
 product prices with simulated buyers of varying personas and willingness-to-pay.
 
+## Why This Matters
+
+Voice agents and AI sales agents are no longer a futuristic concept — they're here today. Every Shopify store owner, from a one-person candle brand to a growing DTC fashion label, leaves money on the table because they sell at fixed prices. Meanwhile, premium buyers are willing to pay more, and bargain hunters will walk unless they feel they got a deal.
+
+We're building an AI negotiation agent that lets even the smallest Shopify store capture more revenue by enabling real-time price haggling — managed entirely by agents. Rich, lazy, or impulsive buyers who don't bother negotiating pay list price. Deal-seekers get a fair discount and still convert. The store owner earns more on every transaction without lifting a finger.
+
+**Our intent is to launch this as a Shopify App Store app** — a plug-and-play AI sales agent that any merchant can install in minutes.
+
+## How It Works — Architecture in 3 Steps
+
+1. **Buyer walks in, agent reads the room.** When a customer initiates a price conversation (via chat widget, voice, or storefront prompt), the environment resets with the product's list price and cost floor. A buyer persona is detected or sampled — eager, neutral, bargain hunter — each with a hidden willingness-to-pay and patience level.
+
+2. **Multi-turn negotiation loop.** The AI agent proposes a price (`[offer: $X.XX]`), the buyer responds (accept, counter-offer, or walk away). Each turn, the agent observes the full conversation history, the buyer's tone, and remaining turns. It decides how much to concede — or whether to hold firm. This repeats for up to 6 turns.
+
+3. **Deal closes, rewards flow.** If the buyer accepts, the sale is recorded at the negotiated price. The agent is scored on revenue captured, profit margin, and how quickly it closed. If the buyer walks, the agent gets zero. Over thousands of episodes, the agent learns which personas to push, which to discount, and when to close fast.
+
+## How to Further Improve This Model
+
+- **Train with GRPO on real transaction data** — Replace synthetic buyer personas with behavioral distributions mined from actual Shopify store transactions (cart abandonment rates, price sensitivity by product category, time-of-day patterns) to make the agent's strategy reflect real customer behavior.
+- **Add an LLM-powered buyer** — Swap the rule-based buyer simulator with a second language model whose system prompt encodes WTP + persona. This creates a self-play loop where both sides improve, producing agents that handle free-form negotiation language, not just parsed offers.
+- **Multi-product and inventory-aware pricing** — Extend the observation space with inventory levels, demand multipliers, and cross-sell opportunities so the agent learns dynamic pricing (e.g., discount slow movers aggressively, hold firm on best-sellers running low).
+- **Deploy with voice integration** — Connect the agent to a voice-to-text pipeline (Whisper + TTS) so customers can literally haggle out loud on the storefront, creating a differentiated shopping experience that no competitor offers.
+
 ## Environment Description
 
 The agent acts as a sales negotiator selling a product with a known list price and
@@ -132,13 +155,13 @@ port 7860 and runs the FastAPI server.
 
 ## Baseline Scores
 
-Scores vary by model and seed. Approximate baselines with `gpt-4o-mini`:
+Scores vary by model and seed. Baselines with `gemini-2.0-flash`:
 
 | Task            | Difficulty | Score  |
 |-----------------|-----------|--------|
-| eager_buyer     | easy      | ~0.75  |
-| neutral_buyer   | medium    | ~0.55  |
-| bargain_hunter  | hard      | ~0.35  |
+| eager_buyer     | easy      | 0.16   |
+| neutral_buyer   | medium    | 0.16   |
+| bargain_hunter  | hard      | 0.14   |
 
 ## Project Structure
 
