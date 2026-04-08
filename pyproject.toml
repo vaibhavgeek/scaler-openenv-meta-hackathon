@@ -20,7 +20,11 @@ dependencies = [
     "uvicorn>=0.23.0",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
+    "openenv-core>=0.2.0",
 ]
+
+[project.scripts]
+server = "server.app:main"
 
 [project.optional-dependencies]
 train = [
@@ -34,4 +38,4 @@ train = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["pricing_env*"]
+include = ["pricing_env*", "server*"]
