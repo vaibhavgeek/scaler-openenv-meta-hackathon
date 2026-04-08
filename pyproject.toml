@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pricing-negotiation"
+version = "1.0.0"
+description = "AI pricing negotiation OpenEnv environment for training sales agents via GRPO"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Vaibhav Maheshwari", email = "vaibhav.dkm@gmail.com"},
+]
+keywords = ["openenv", "reinforcement-learning", "negotiation", "pricing", "sales-agent"]
+
+dependencies = [
+    "pydantic>=2.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+train = [
+    "trl>=0.17.0",
+    "transformers",
+    "datasets",
+    "accelerate",
+    "vllm",
+    "trackio",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pricing_env*"]
