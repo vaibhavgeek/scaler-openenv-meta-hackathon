@@ -106,8 +106,12 @@ def buyer_step(
 
     # Otherwise, counter-offer. Pull toward WTP with some noise.
     target = buyer.wtp * rng.uniform(0.85, 0.98)
-    # Don't counter above the agent's last offer (that would be silly).
-    counter = min(target, offer * rng.uniform(0.75, 0.92))
+    if target < offer:
+        # Normal: buyer wants less than agent's offer — counter in the gap
+        counter = target + (offer - target) * rng.uniform(0.05, 0.25)
+    else:
+        # Agent offered below WTP — buyer counters slightly above offer
+        counter = offer * rng.uniform(1.01, 1.05)
     counter = max(counter, 1.0)
     buyer.last_counter = counter
     return BuyerResponse(action="counter", counter_price=counter, message=_counter_text(buyer, offer, counter))

@@ -51,8 +51,8 @@ TASKS: List[TaskDef] = [
                     "and low price sensitivity. Closing the deal should be straightforward; "
                     "the challenge is maximizing the sale price.",
         list_price=100.0,
-        cost=50.0,
-        max_turns=6,
+        cost=40.0,
+        max_turns=8,
         persona="eager",
         wtp_range=(0.90, 1.10),
         sensitivity_range=(3.0, 5.0),
@@ -82,11 +82,11 @@ TASKS: List[TaskDef] = [
         name="bargain_hunter",
         difficulty="hard",
         description="Negotiate with a bargain hunter who has low willingness-to-pay "
-                    "and high price sensitivity. The buyer is patient and will walk "
-                    "unless given a significant discount. Closing above cost is the goal.",
+                    "and high price sensitivity. Margins are tight and time is short. "
+                    "Closing above cost is the goal.",
         list_price=100.0,
-        cost=50.0,
-        max_turns=6,
+        cost=60.0,
+        max_turns=5,
         persona="bargain_hunter",
         wtp_range=(0.55, 0.80),
         sensitivity_range=(7.0, 10.0),
@@ -136,13 +136,18 @@ def grade_episode(
     sold: bool,
     final_price: Optional[float],
     turns_used: int,
+    offers: Optional[List[Optional[float]]] = None,
 ) -> float:
     """Grade a completed episode for the given task. Returns score in [0.0, 1.0].
 
-    Scoring:
-      conversion_component = 1.0 if sold, else 0.0
-      revenue_component    = profit / max_profit (if sold)
-      efficiency_component = (max_turns - turns + 1) / max_turns (if sold)
+    Scoring (if sold):
+      conversion_component = 1.0
+      revenue_component    = profit / max_profit
+      efficiency_component = (max_turns - turns + 1) / max_turns
+
+    Scoring (if not sold, partial credit):
+      negotiation_quality based on: offers above cost, in reasonable range,
+      concession pattern. Capped at 25% of conversion_weight.
 
     Final score = weighted sum, clamped to [0, 1].
     """
@@ -163,11 +168,36 @@ def grade_episode(
     else:
         efficiency = 0.0
 
-    score = (
-        task.conversion_weight * conversion
-        + task.revenue_weight * revenue
-        + task.efficiency_weight * efficiency
-    )
+    if sold:
+        score = (
+            task.conversion_weight * conversion
+            + task.revenue_weight * revenue
+            + task.efficiency_weight * efficiency
+        )
+    else:
+        # Partial credit for failed episodes based on negotiation quality
+        negotiation_quality = 0.0
+        if offers:
+            valid_offers = [o for o in offers if o is not None]
+            if valid_offers:
+                # Credit for offers above cost (valid pricing)
+                above_cost = sum(1 for o in valid_offers if o >= task.cost) / len(valid_offers)
+                # Credit for offers in reasonable range
+                in_range = sum(
+                    1 for o in valid_offers
+                    if task.cost <= o <= task.list_price * 1.3
+                ) / len(valid_offers)
+                # Credit for showing concession (prices should decrease over time)
+                concession = 0.0
+                if len(valid_offers) >= 2:
+                    decreasing = sum(
+                        1 for i in range(len(valid_offers) - 1)
+                        if valid_offers[i] >= valid_offers[i + 1]
+                    )
+                    concession = decreasing / (len(valid_offers) - 1)
+                negotiation_quality = (above_cost + in_range + concession) / 3.0
+        score = task.conversion_weight * 0.25 * negotiation_quality
+
     return min(max(score, 0.0), 1.0)
 
 
@@ -193,18 +223,20 @@ def run_task_episode(
     sold = False
     final_price = None
     rewards: List[float] = []
+    offers: List[Optional[float]] = []
 
     while not result.done:
         action_text = get_action(result.observation, result.info)
         result = env.step(PricingAction(message=action_text))
         turns_used += 1
         rewards.append(result.reward)
+        offers.append(result.info.get("offer"))
 
         if result.info.get("final_outcome") == "sold":
             sold = True
             final_price = result.info.get("offer")
 
-    score = grade_episode(task, sold, final_price, turns_used)
+    score = grade_episode(task, sold, final_price, turns_used, offers=offers)
     return {
         "task": task.name,
         "difficulty": task.difficulty,

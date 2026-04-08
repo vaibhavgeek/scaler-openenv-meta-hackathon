@@ -35,6 +35,7 @@ current_task: Optional[TaskDef] = None
 episode_turns: int = 0
 episode_sold: bool = False
 episode_final_price: Optional[float] = None
+episode_offers: list = []
 
 
 class ActionRequest(BaseModel):
@@ -76,11 +77,12 @@ def list_tasks():
 
 @app.post("/reset")
 def reset():
-    global current_task, episode_turns, episode_sold, episode_final_price
+    global current_task, episode_turns, episode_sold, episode_final_price, episode_offers
     current_task = None
     episode_turns = 0
     episode_sold = False
     episode_final_price = None
+    episode_offers = []
 
     result = env.reset()
     return ResetResponse(
@@ -93,7 +95,7 @@ def reset():
 
 @app.post("/reset/{task_name}")
 def reset_task(task_name: str):
-    global current_task, episode_turns, episode_sold, episode_final_price
+    global current_task, episode_turns, episode_sold, episode_final_price, episode_offers
 
     if task_name not in TASK_MAP:
         raise HTTPException(status_code=404, detail=f"Task '{task_name}' not found. Available: {list(TASK_MAP.keys())}")
@@ -102,6 +104,7 @@ def reset_task(task_name: str):
     episode_turns = 0
     episode_sold = False
     episode_final_price = None
+    episode_offers = []
 
     result = reset_for_task(env, current_task)
     return ResetResponse(
@@ -114,13 +117,14 @@ def reset_task(task_name: str):
 
 @app.post("/step")
 def step(action: ActionRequest):
-    global episode_turns, episode_sold, episode_final_price
+    global episode_turns, episode_sold, episode_final_price, episode_offers
 
     if env.done:
         raise HTTPException(status_code=400, detail="Episode is done. Call /reset first.")
 
     result = env.step(PricingAction(message=action.message))
     episode_turns += 1
+    episode_offers.append(result.info.get("offer"))
 
     if result.info.get("final_outcome") == "sold":
         episode_sold = True
@@ -135,7 +139,7 @@ def step(action: ActionRequest):
 
     # If done and we have a task, include the graded score
     if result.done and current_task:
-        score = grade_episode(current_task, episode_sold, episode_final_price, episode_turns)
+        score = grade_episode(current_task, episode_sold, episode_final_price, episode_turns, offers=episode_offers)
         response.info["graded_score"] = score
 
     return response

@@ -156,8 +156,7 @@ class PricingEnv:
         self.turn += 1
         offer = extract_offer(action.message)
 
-        # Malformed action: keep the episode alive but signal invalid offer so
-        # the reward can penalize it. The buyer treats it as no movement.
+        # Malformed action: penalize but keep the episode alive.
         if offer is None:
             self.messages.append(Message(category="AGENT", content=action.message))
             self.messages.append(
@@ -169,13 +168,35 @@ class PricingEnv:
                 info["final_outcome"] = "timeout"
             return Result(
                 observation=self._make_observation(),
-                reward=0.0,
+                reward=-0.1,
                 done=self.done,
                 info=info,
             )
 
         # Record agent's offer.
         self.messages.append(Message(category="AGENT", content=f"[offer: ${offer:.2f}] {action.message}"))
+
+        # Penalize below-cost offers immediately.
+        if offer < self.cost:
+            info: Dict[str, Any] = {
+                "valid_offer": True,
+                "offer": offer,
+                "buyer_action": "below_cost",
+                "buyer_wtp": self.buyer.wtp,
+                "counter_price": None,
+            }
+            self.messages.append(
+                Message(category="BUYER", content="That seems surprisingly low... are you sure?")
+            )
+            if self.turn >= self.max_turns:
+                self.done = True
+                info["final_outcome"] = "timeout"
+            return Result(
+                observation=self._make_observation(),
+                reward=-0.2,
+                done=self.done,
+                info=info,
+            )
 
         # Buyer responds.
         response: BuyerResponse = buyer_step(self.buyer, offer, self.rng)
@@ -193,7 +214,10 @@ class PricingEnv:
             self.done = True
             self.sold_price = offer
             info["final_outcome"] = "sold"
-            return Result(observation=self._make_observation(), reward=offer, done=True, info=info)
+            # Normalized reward: profit ratio in [0, 1]
+            margin = max(self.list_price - self.cost, 1e-6)
+            normalized_reward = max(0.0, (offer - self.cost) / margin)
+            return Result(observation=self._make_observation(), reward=normalized_reward, done=True, info=info)
 
         if response.action == "reject_walk":
             self.done = True
@@ -206,7 +230,8 @@ class PricingEnv:
             info["final_outcome"] = "timeout"
             return Result(observation=self._make_observation(), reward=0.0, done=True, info=info)
 
-        return Result(observation=self._make_observation(), reward=0.0, done=False, info=info)
+        # Valid offer that keeps negotiation alive — small positive signal.
+        return Result(observation=self._make_observation(), reward=0.05, done=False, info=info)
 
     def state(self) -> EnvState:
         """Return the current environment state (OpenEnv spec)."""

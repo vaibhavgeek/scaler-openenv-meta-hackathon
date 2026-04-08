@@ -49,13 +49,13 @@ LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # required only if using Docke
 
 TASK_NAME = os.getenv("PRICING_ENV_TASK", "eager_buyer")
 BENCHMARK = "pricing-negotiation"
-MAX_STEPS = 6
-TEMPERATURE = 0.7
+MAX_STEPS = 8  # matches max_turns of easiest task
+TEMPERATURE = 0.3
 MAX_TOKENS = 256
 SUCCESS_SCORE_THRESHOLD = 0.5
 
-# Max possible reward: list_price (100) per step if sold
-MAX_TOTAL_REWARD = 100.0 * MAX_STEPS
+# Max possible reward: ~1.0 normalized per step, up to 8 steps
+MAX_TOTAL_REWARD = 8.0
 
 SYSTEM_PROMPT = textwrap.dedent("""
     You are an expert sales negotiator. Your goal is to maximize revenue while closing deals.
@@ -77,6 +77,34 @@ SYSTEM_PROMPT = textwrap.dedent("""
     ## RESPONSE FORMAT
     [offer: $XX.XX] <one sentence justification>
 """).strip()
+
+TASK_GUIDANCE = {
+    "eager_buyer": (
+        "\n\n## TASK CONTEXT\n"
+        "This buyer is EAGER with high willingness-to-pay and low price sensitivity. "
+        "Anchor firmly at or near list price. Concede slowly — "
+        "they will likely accept a price well above your cost. "
+        "Prioritize maximizing sale price over closing speed."
+    ),
+    "neutral_buyer": (
+        "\n\n## TASK CONTEXT\n"
+        "This buyer is MODERATE. They will negotiate but walk if pushed too hard. "
+        "Start near list price but be prepared to concede 15-25%. "
+        "Balance price maximization with deal closure risk."
+    ),
+    "bargain_hunter": (
+        "\n\n## TASK CONTEXT\n"
+        "This buyer is a BARGAIN HUNTER with low willingness-to-pay and high sensitivity. "
+        "Your margin is tight — cost floor is high relative to list price. "
+        "Concede strategically but protect your margin. "
+        "Closing above cost is more important than maximizing price."
+    ),
+}
+
+
+def get_task_prompt(task_name: str) -> str:
+    """Return SYSTEM_PROMPT with task-specific strategy appended."""
+    return SYSTEM_PROMPT + TASK_GUIDANCE.get(task_name, "")
 
 
 # ---------- logging helpers (exact [START]/[STEP]/[END] format) ----------
@@ -116,7 +144,7 @@ def build_user_prompt(step: int, obs: Observation, last_reward: float, history: 
         Step: {step}
         List price: ${obs.list_price:.2f}
         Your cost floor: ${obs.cost:.2f}
-        Turn: {obs.turn + 1} / {obs.max_turns}
+        Turn: {obs.turn} / {obs.max_turns}
         Last reward: {last_reward:.2f}
 
         Conversation:
@@ -135,13 +163,14 @@ def get_model_message(
     obs: Observation,
     last_reward: float,
     history: List[str],
+    task_prompt: Optional[str] = None,
 ) -> str:
     user_prompt = build_user_prompt(step, obs, last_reward, history)
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": task_prompt or SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=TEMPERATURE,
@@ -176,12 +205,13 @@ async def run_task(client: OpenAI, task: TaskDef, seed: int = 42) -> dict:
     try:
         result = reset_for_task(env, task)
         last_reward = 0.0
+        task_prompt = get_task_prompt(task.name)
 
         for step in range(1, MAX_STEPS + 1):
             if result.done:
                 break
 
-            message = get_model_message(client, step, result.observation, last_reward, history)
+            message = get_model_message(client, step, result.observation, last_reward, history, task_prompt=task_prompt)
             result = env.step(PricingAction(message=message))
 
             reward = result.reward or 0.0
