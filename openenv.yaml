@@ -1,0 +1,91 @@
+name: pricing-negotiation
+version: "1.0.0"
+description: >
+  A real-world pricing negotiation environment where an AI agent must negotiate
+  product prices with simulated buyers of varying personas and willingness-to-pay.
+  The agent learns to maximize revenue while closing deals across easy, medium,
+  and hard buyer types.
+
+tags:
+  - openenv
+  - negotiation
+  - pricing
+  - rl
+  - sales
+
+observation:
+  type: object
+  fields:
+    prompt:
+      type: string
+      description: System context with list price, cost floor, and turn limit
+    messages:
+      type: array
+      items:
+        type: object
+        fields:
+          category:
+            type: string
+            enum: ["SYSTEM", "BUYER", "AGENT"]
+          content:
+            type: string
+    list_price:
+      type: float
+      description: Product list price
+    cost:
+      type: float
+      description: Agent's cost floor (minimum sale price)
+    turn:
+      type: integer
+      description: Current turn number
+    max_turns:
+      type: integer
+      description: Maximum turns before episode ends
+
+action:
+  type: object
+  fields:
+    message:
+      type: string
+      description: >
+        Agent's response containing a price offer in the format [offer: $X.XX]
+        followed by optional justification text.
+
+reward:
+  type: float
+  range: [0.0, 1.0]
+  description: >
+    Composite score combining conversion (did the deal close), revenue quality
+    (profit captured vs max possible), and efficiency (fewer turns = better).
+
+tasks:
+  - name: eager_buyer
+    difficulty: easy
+    description: >
+      Negotiate with an eager buyer (high WTP 90-110% of list, low sensitivity).
+      Focus on maximizing sale price rather than just closing.
+    max_steps: 6
+    reward_range: [0.0, 1.0]
+
+  - name: neutral_buyer
+    difficulty: medium
+    description: >
+      Negotiate with a neutral buyer (moderate WTP 75-100% of list).
+      Balance price concessions with deal closure probability.
+    max_steps: 6
+    reward_range: [0.0, 1.0]
+
+  - name: bargain_hunter
+    difficulty: hard
+    description: >
+      Negotiate with a bargain hunter (low WTP 55-80% of list, high sensitivity).
+      Closing above cost is challenging; requires strategic concessions.
+    max_steps: 6
+    reward_range: [0.0, 1.0]
+
+docker:
+  image: pricing-negotiation
+  port: 7860
+
+huggingface:
+  space_sdk: docker
